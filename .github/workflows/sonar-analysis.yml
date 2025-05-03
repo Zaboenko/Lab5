@@ -1,50 +1,29 @@
-name: SonarQube Analysis
-
+name: SonarQube
 on:
   push:
     branches:
       - main
   pull_request:
-    branches:
-      - main
-
+    types: [opened, synchronize, reopened]
 jobs:
-  sonar:
-    name: Analyze with SonarQube
-    runs-on: ubuntu-latest
-
+  build:
+    name: Build and analyze
+    runs-on: windows-latest
+    env:
+      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v3
+      - uses: actions/checkout@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Build project (C++)
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Install Build Wrapper
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v5
+      - name: Run Build Wrapper
         run: |
-          sudo apt update
-          sudo apt install -y build-essential cmake
-          mkdir build && cd build
-          cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
-          make
-
-      - name: Install SonarScanner
-        run: |
-          curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-          unzip sonar-scanner.zip
-          mv sonar-scanner-5.0.1.3006-linux sonar-scanner
-          echo "$(pwd)/sonar-scanner/bin" >> $GITHUB_PATH
-
-      - name: Run SonarQube Scan
+          build-wrapper-win-x86-64.exe --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} <insert_your_clean_build_command>
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          sonar-scanner -X\
-            -Dsonar.projectKey=PrilexYMCA_Laba5 \
-            -Dsonar.organization=prilexymca52 \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.sources=. \
-            -Dsonar.cfamily.compile-commands=build/compile_commands.json
+        with:
+          args: >
+            --define sonar.cfamily.compile-commands="${{ env.BUILD_WRAPPER_OUT_DIR }}/compile_commands.json"
